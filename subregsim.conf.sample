@@ -1,0 +1,29 @@
+# Docker configuration, read README.md for details
+
+# Required simulator user name
+username = username
+
+# Required simulator password
+password = password
+
+# Required simulator domain
+domain = example.com
+
+# Host name or IP address to listen on (use 127.0.0.1 for testing on localhost,
+# or 0.0.0.0 to accept any address for testing with Docker)
+host = 0.0.0.0
+
+# Port to listen on when in HTTP mode
+#port = 80
+
+# If you want to switch to HTTPS (SSL), uncomment the following line
+#ssl = true
+
+# Port to listen on when in HTTPS (SSL) mode
+#ssl-port = 443
+
+# SSL server certificate in PEM format (may contain private key)
+#ssl-certificate = /config/server-certificate.crt
+
+# SSL server private key in PEM format (not necessary if present in the certificate file)
+#ssl-private-key = /config/server-certificate.key

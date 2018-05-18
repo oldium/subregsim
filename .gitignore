@@ -1,0 +1,8 @@
+/.project
+/.pydevproject
+/SubregSimulator.egg-info/
+*.pyc
+*.crt
+*.pem
+*.key
+subregsim.conf

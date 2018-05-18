@@ -1,0 +1,5 @@
+# Package requirements
+
+future
+git+https://github.com/oldium/pysimplesoap.git@fix-typeerror#egg=PySimpleSOAP
+configargparse

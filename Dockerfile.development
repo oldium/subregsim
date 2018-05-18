@@ -1,0 +1,45 @@
+# Docker file for development (sources taken from the current directory)
+# 1. Build as: docker build -t subregsim:develop-latest -f Dockerfile.development .
+# 2. Prepare configuration file and certificates (both optional) - see argument "-c" in next step
+# 3. Run as: docker run --rm -it -v $PWD/server-certificate.crt:/config/server-certificate.crt -v $PWD/server-certificate.key:/config/server-certificate.key -v $PWD/subregsim.conf:/config/subregsim.conf -v $PWD/.:/source subregsim:develop-latest -c /config/subregsim.conf
+
+# Base image
+FROM alpine:edge as base
+
+RUN mkdir /python
+ENV PYTHONUSERBASE=/python
+ENV PATH="$PYTHONUSERBASE/bin:$PATH"
+
+RUN apk add --no-cache python3~3.6 py3-openssl
+
+# Build phase
+FROM base as build
+
+RUN mkdir /build
+WORKDIR /build
+
+RUN apk add --no-cache git py3-setuptools && \
+	pip3 install --upgrade pip
+
+RUN mkdir /source
+WORKDIR /source
+
+COPY requirements.txt /source/
+RUN cd /source && pip3 install --user -r requirements.txt
+
+COPY setup.py setup.cfg README.md /source/
+COPY ./subregsim /source/subregsim
+RUN pip3 install --user -e .
+
+# Final phase
+FROM base
+
+EXPOSE 80 443
+
+COPY --from=build /python /python
+
+RUN mkdir /source
+VOLUME ["/source"]
+
+ENTRYPOINT ["/python/bin/subregsim"]
+CMD ["--help"]
