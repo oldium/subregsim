@@ -4,12 +4,13 @@ Subreg.cz API simulator suitable for Python lexicon module.
 
 from __future__ import (absolute_import, print_function)
 
-__version__ = "0.1"
+__version__ = "0.2"
 
 import configargparse
 import logging
 import signal
 import threading
+import time
 
 from .api import (Api, ApiDispatcher, ApiHttpServer)
 
@@ -22,6 +23,12 @@ try:
 except:
     has_ssl = False
 
+try:
+    from . import dns
+    has_dns = True
+except:
+    has_dns = False
+
 def parse_command_line():
     parser = configargparse.ArgumentParser(description="Subreg.cz API simulator suitable for Python lexicon module.")
     required_group = parser.add_argument_group("required arguments")
@@ -31,9 +38,11 @@ def parse_command_line():
 
     optional_group = parser.add_argument_group("optional arguments")
     optional_group.add_argument("-c", "--config", metavar="FILE", is_config_file=True, help="configuration file for all options (can be specified only on command-line)")
-    optional_group.add_argument("--host", default="localhost", env_var="SUBREGSIM_HOST", help="server listening host name or IP address (defaults to localhost)")
-    optional_group.add_argument("--port", type=int, default=80, env_var="SUBREGSIM_PORT", help="server listening port (defaults to 80)")
-    optional_group.add_argument("--url", default="http://localhost:8008/", env_var="SUBREGSIM_URL", help="API root URL for WSDL generation (defaults to http://localhost:8008/)")
+
+    web_group = parser.add_argument_group("optional server arguments")
+    web_group.add_argument("--host", default="localhost", env_var="SUBREGSIM_HOST", help="server listening host name or IP address (defaults to localhost)")
+    web_group.add_argument("--port", type=int, default=80, env_var="SUBREGSIM_PORT", help="server listening port (defaults to 80)")
+    web_group.add_argument("--url", default="http://localhost:8008/", env_var="SUBREGSIM_URL", help="API root URL for WSDL generation (defaults to http://localhost:8008/)")
 
     if has_ssl:
         ssl_group = parser.add_argument_group("optional SSL arguments")
@@ -42,6 +51,12 @@ def parse_command_line():
         ssl_group.add_argument("--ssl-certificate", dest="ssl_certificate", metavar="PEM-FILE", default=None, env_var="SUBREGSIM_SSL_CERTIFICATE", help="specifies server certificate")
         ssl_group.add_argument("--ssl-private-key", dest="ssl_private_key", metavar="PEM-FILE", default=None, env_var="SUBREGSIM_SSL_PRIVATE_KEY", help="specifies server privatey key (not necessary if private key is part of certificate file)")
 
+    if has_dns:
+        dns_group = parser.add_argument_group("optional DNS server arguments")
+        dns_group.add_argument("--dns", dest="dns", action="store_true", default=False, env_var="SUBREGSIM_DNS", help="enables DNS server")
+        dns_group.add_argument("--dns-host", dest="dns_host", default="localhost", env_var="SUBREGSIM_DNS_HOST", help="DNS server listening host name or IP address (defaults to localhost)")
+        dns_group.add_argument("--dns-port", dest="dns_port", type=int, default=53, metavar="PORT", env_var="SUBREGSIM_DNS_PORT", help="DNS server listening port (defaults to 53)")
+
     parsed = parser.parse_args()
 
     if has_ssl and parsed.ssl and ('ssl_certificate' not in parsed or not parsed.ssl_certificate):
@@ -49,9 +64,10 @@ def parse_command_line():
 
     return parsed
 
+terminated = False
+
 class TerminationHandler(object):
-    def __init__(self, httpd):
-        self.httpd = httpd
+    def __init__(self):
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
 
@@ -62,7 +78,9 @@ class TerminationHandler(object):
             log.info("Shutting down due to termination request")
         else:
             log.info("Shutting down due to interrupt request")
-        self.httpd.shutdown()
+
+        global terminated
+        terminated = True
 
 def main():
 
@@ -73,8 +91,10 @@ def main():
     dispatcher.register_api(api)
 
     use_ssl = has_ssl and arguments.ssl
+    use_dns = has_dns and arguments.dns
 
     httpd = ApiHttpServer((arguments.host, arguments.port), use_ssl, dispatcher)
+    stop_servers = [ httpd ]
 
     if use_ssl:
         log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.ssl_port))
@@ -85,13 +105,35 @@ def main():
     else:
         log.info("Starting HTTP server to listen on {}:{}...".format(arguments.host, arguments.port))
 
-    TerminationHandler(httpd)
+    if use_dns:
+        log.info("Starting DNS server to listen on {}:{}...".format(arguments.dns_host, arguments.dns_port))
+        api_resolver = dns.ApiDnsResolver(api)
+        dns_udp = dns.ApiDns(api_resolver, arguments.dns_host, arguments.dns_port, False)
+        dns_tcp = dns.ApiDns(api_resolver, arguments.dns_host, arguments.dns_port, True)
+
+        stop_servers.append(dns_udp)
+        stop_servers.append(dns_tcp)
+
+        dns_udp.start_thread()
+        dns_tcp.start_thread()
+
+    TerminationHandler()
 
     httpd_thread = threading.Thread(target=httpd.run, name="SOAP Server")
     httpd_thread.start()
 
-    while httpd_thread.is_alive():
-        httpd_thread.join(timeout=0.5)
+    while not terminated:
+        time.sleep(0.5)
+
+    httpd.shutdown()
+    httpd_thread.join()
+
+    if use_dns:
+        dns_udp.stop()
+        dns_tcp.stop()
+
+        dns_udp.thread.join()
+        dns_tcp.thread.join()
 
 if __name__ == '__main__':
     try:

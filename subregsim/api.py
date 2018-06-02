@@ -6,6 +6,7 @@ from __future__ import (absolute_import, print_function)
 import logging
 import random
 import string
+import threading
 import pysimplesoap.server as soapserver
 from http.server import HTTPServer
 
@@ -19,6 +20,37 @@ class Api(object):
         self.domain = domain
         self.db = []
         self.ssid = None
+        self.sn = 1
+        self.db_lock = threading.Lock()
+
+    def toZone(self):
+        zone = []
+        zone.append("$ORIGIN .")
+        zone.append("$TTL 1800")
+
+        with self.db_lock:
+            zone.append("{} IN SOA ns.example.com admin.example.com ( {} 86400 900 1209600 1800 )".format(
+                self.domain,
+                self.sn,
+                ))
+
+            for rr in self.db:
+                name = rr["name"]
+                type = rr["type"]
+                content = rr["content"] if "content" in rr else ""
+                prio = rr["prio"]
+                ttl = rr["ttl"] if rr["ttl"] != 1800 else ""
+
+                if type != "MX":
+                    prio = ""
+
+                if type == "TXT":
+                    content = '"{}"'.format(content.replace('"', r'\"'))
+
+                zone.append("{} {} IN {} {} {}".format(
+                    name, ttl, type, prio, content))
+
+        return "\n".join(zone)
 
     def login(self, login, password):
         log.info("Login: {}/{}".format(login, password))
@@ -211,7 +243,9 @@ class Api(object):
         if 'prio' not in new_record:
             new_record['prio'] = 0
 
-        self.db.append(new_record)
+        with self.db_lock:
+            self.db.append(new_record)
+            self.sn += 1
 
         return {
             "response": {
@@ -276,22 +310,24 @@ class Api(object):
                     }
                 }
 
-        found_items = [item for item in self.db if item["id"] == record["id"]]
-        if len(found_items) == 0:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Record does not exist",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1003
+        with self.db_lock:
+            found_items = [item for item in self.db if item["id"] == record["id"]]
+            if len(found_items) == 0:
+                return {
+                    "response": {
+                        "status": "error",
+                        "error": {
+                            "errormsg": "Record does not exist",
+                            "errorcode": {
+                                "major": 524,
+                                "minor": 1003
+                                }
                             }
                         }
                     }
-                }
 
-        found_items[0].update(record)
+            found_items[0].update(record)
+            self.sn += 1
 
         return {
             "response": {
@@ -356,21 +392,24 @@ class Api(object):
                     }
                 }
 
-        before_length = len(self.db)
-        self.db = [item for item in self.db if item["id"] != record["id"]]
-        if before_length == len(self.db):
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Record does not exist",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1003
+        with self.db_lock:
+            before_length = len(self.db)
+            self.db = [item for item in self.db if item["id"] != record["id"]]
+            if before_length == len(self.db):
+                return {
+                    "response": {
+                        "status": "error",
+                        "error": {
+                            "errormsg": "Record does not exist",
+                            "errorcode": {
+                                "major": 524,
+                                "minor": 1003
+                                }
                             }
                         }
                     }
-                }
+
+            self.sn += 1
 
         return {
             "response": {

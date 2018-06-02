@@ -17,7 +17,7 @@ git clone -q https://github.com/oldium/subregsim.git
 cd subregsim
 ```
 
-Install dependencies:
+Install dependencies (currently PySimpleSOAP needs a patch):
 
 ```
 pip install -r requirements.txt

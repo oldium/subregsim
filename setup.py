@@ -66,7 +66,9 @@ setup(
     install_requires=['future',
                       'PySimpleSOAP',
                       'configargparse'],
-    extras_require={},
+    extras_require={
+        'dns': ['dnslib'],
+        },
 
     entry_points={
         'console_scripts': [
