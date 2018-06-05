@@ -4,7 +4,7 @@ Subreg.cz API simulator suitable for Python lexicon module.
 
 from __future__ import (absolute_import, print_function)
 
-__version__ = "0.2"
+__version__ = "0.3"
 
 import configargparse
 import logging
@@ -86,24 +86,26 @@ def main():
 
     arguments = parse_command_line()
 
+    use_ssl = has_ssl and arguments.ssl
+    use_dns = has_dns and arguments.dns
+
     api = Api(arguments.username, arguments.password, arguments.domain)
     dispatcher = ApiDispatcher(arguments.url)
     dispatcher.register_api(api)
 
-    use_ssl = has_ssl and arguments.ssl
-    use_dns = has_dns and arguments.dns
-
-    httpd = ApiHttpServer((arguments.host, arguments.port), use_ssl, dispatcher)
-    stop_servers = [ httpd ]
-
     if use_ssl:
         log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.ssl_port))
+
+        httpd = ApiHttpServer((arguments.host, arguments.ssl_port), use_ssl, dispatcher)
         httpd.socket = ssl.wrap_socket(httpd.socket,
                                        keyfile=arguments.ssl_private_key,
                                        certfile=arguments.ssl_certificate,
                                        server_side=True)
     else:
         log.info("Starting HTTP server to listen on {}:{}...".format(arguments.host, arguments.port))
+        httpd = ApiHttpServer((arguments.host, arguments.port), use_ssl, dispatcher)
+
+    stop_servers = [httpd]
 
     if use_dns:
         log.info("Starting DNS server to listen on {}:{}...".format(arguments.dns_host, arguments.dns_port))
