@@ -571,9 +571,15 @@ class ApiDispatcher(soapserver.SoapDispatcher):
                                args=api.DELETE_DNS_RECORD_REQUEST_TYPES,
                                returns=api.DELETE_DNS_RECORD_RESPONSE_TYPES)
 
+class ApiHandler(soapserver.SOAPHandler):
+    def do_GET(self):
+        if self.path == "/wsdl":
+            self.path = "/"
+        soapserver.SOAPHandler.do_GET(self)
+
 class ApiHttpServer(HTTPServer):
     def __init__(self, server_address, is_ssl, dispatcher):
-        HTTPServer.__init__(self, server_address, soapserver.SOAPHandler)
+        HTTPServer.__init__(self, server_address, ApiHandler)
         self.is_ssl = is_ssl
         self.dispatcher = dispatcher
 
