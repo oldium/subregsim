@@ -52,25 +52,28 @@ The configuration can be supplied in two ways:
 
 #### Local Certificate Authority
 
-Generate self-signed certificate for your Certificate Authority (use your own `subj` string):
+Generate self-signed certificate for your Certificate Authority (use your own
+`subj` string):
 
 ```
 openssl req -x509 -newkey rsa:4096 -nodes -keyout test-ca.key -sha256 -days 1825 -subj "/C=GB/ST=London/L=London/O=Global Security/OU=IT Department/CN=Test System CA" -out test-ca.csr
 ```
 
 Now you have file `test-ca.key` with private key of Certificate Authority and
-`test-ca.crt` with certificate. You can now import the `test-ca.crt`
+`test-ca.crt` with self-signed certificate. You can now import the `test-ca.crt`
 file into your test system.
 
 #### Domain Certificate
 
-Now generate domain certificate, replace `example.com` with your domain (and use your own `subj` string):
+Now generate domain certificate, replace `example.com` with your domain (and use
+your own `subj` string):
 
 ```
 openssl req -newkey rsa:4096 -nodes -keyout server-certificate.key -subj "/C=GB/ST=London/L=London/O=Global Security/OU=IT Department/CN=example.com" -out server-certificate.csr
 ```
 
-The file `server-certificate.key` is the private key, the file `server-certificate.csr` is certificate signing request.
+The file `server-certificate.key` is the private key, the file
+`server-certificate.csr` is certificate signing request.
 
 #### Signed Domain Certificate
 
