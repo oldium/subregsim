@@ -567,7 +567,7 @@ class ApiDispatcher(soapserver.SoapDispatcher):
         self.register_function("Modify_DNS_Record", api.modify_dns_record,
                                args=api.MODIFY_DNS_RECORD_REQUEST_TYPES,
                                returns=api.MODIFY_DNS_RECORD_RESPONSE_TYPES)
-        self    .register_function("Delete_DNS_Record", api.delete_dns_record,
+        self.register_function("Delete_DNS_Record", api.delete_dns_record,
                                args=api.DELETE_DNS_RECORD_REQUEST_TYPES,
                                returns=api.DELETE_DNS_RECORD_RESPONSE_TYPES)
 
