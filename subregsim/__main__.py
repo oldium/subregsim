@@ -13,7 +13,14 @@ import threading
 import time
 
 from .api import Api
-from .http.soapserver import ApiHttpServer
+
+try:
+    from .http.spyne import ApiHttpServer
+except:
+    try:
+        from .http.soapserver import ApiHttpServer
+    except:
+        raise Exception("Neither Spyne nor PySimpleSOAP is installed")
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

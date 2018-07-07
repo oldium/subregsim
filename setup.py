@@ -64,9 +64,10 @@ setup(
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=['future',
-                      'PySimpleSOAP',
                       'configargparse'],
     extras_require={
+        'pysimplesoap': ['PySimpleSOAP'],
+        'spyne': ['spyne'],
         'dns': ['dnslib'],
         },
 
