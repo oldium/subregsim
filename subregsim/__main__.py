@@ -12,7 +12,8 @@ import signal
 import threading
 import time
 
-from .api import (Api, ApiDispatcher, ApiHttpServer)
+from .api import Api
+from .http.soapserver import ApiHttpServer
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +83,20 @@ class TerminationHandler(object):
         global terminated
         terminated = True
 
+def server_runner(server, is_ssl):
+    try:
+        server.serve_forever()
+    except:
+        if is_ssl:
+            log.exception("Error running HTTPS server")
+        else:
+            log.exception("Error running HTTP server")
+    finally:
+        try:
+            server.server_close()
+        except:
+            pass
+
 def main():
 
     arguments = parse_command_line()
@@ -90,20 +105,18 @@ def main():
     use_dns = has_dns and arguments.dns
 
     api = Api(arguments.username, arguments.password, arguments.domain)
-    dispatcher = ApiDispatcher(arguments.url)
-    dispatcher.register_api(api)
 
     if use_ssl:
         log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.ssl_port))
 
-        httpd = ApiHttpServer((arguments.host, arguments.ssl_port), use_ssl, dispatcher)
+        httpd = ApiHttpServer((arguments.host, arguments.ssl_port), arguments.url, api, use_ssl)
         httpd.socket = ssl.wrap_socket(httpd.socket,
                                        keyfile=arguments.ssl_private_key,
                                        certfile=arguments.ssl_certificate,
                                        server_side=True)
     else:
         log.info("Starting HTTP server to listen on {}:{}...".format(arguments.host, arguments.port))
-        httpd = ApiHttpServer((arguments.host, arguments.port), use_ssl, dispatcher)
+        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, use_ssl)
 
     stop_servers = [httpd]
 
@@ -121,7 +134,7 @@ def main():
 
     TerminationHandler()
 
-    httpd_thread = threading.Thread(target=httpd.run, name="SOAP Server")
+    httpd_thread = threading.Thread(target=server_runner, args=(httpd, use_ssl), name="SOAP Server")
     httpd_thread.start()
 
     while not terminated:
