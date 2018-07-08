@@ -4,7 +4,7 @@ Subreg.cz API simulator suitable for Python lexicon module.
 
 from __future__ import (absolute_import, print_function)
 
-__version__ = "0.3"
+__version__ = "0.5"
 
 import configargparse
 import logging
