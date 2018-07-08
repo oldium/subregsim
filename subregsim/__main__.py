@@ -40,7 +40,7 @@ except:
 def parse_command_line():
     parser = configargparse.ArgumentParser(description="Subreg.cz API simulator suitable for Python lexicon module.")
     required_group = parser.add_argument_group("required arguments")
-    required_group.add_argument("--domain", required=True, env_var="SUBREGSIM_DOMAIN", help="simulated domain name")
+    required_group.add_argument("--domain", dest="domains", required=True, action="append", env_var="SUBREGSIM_DOMAIN", help="simulated domain name")
     required_group.add_argument("--username", required=True, env_var="SUBREGSIM_USERNAME", help="expected login user name by the server")
     required_group.add_argument("--password", required=True, env_var="SUBREGSIM_PASSWORD", help="expected login password by the server")
 
@@ -111,7 +111,7 @@ def main():
     use_ssl = has_ssl and arguments.ssl
     use_dns = has_dns and arguments.dns
 
-    api = Api(arguments.username, arguments.password, arguments.domain)
+    api = Api(arguments.username, arguments.password, arguments.domains)
 
     if use_ssl:
         log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.ssl_port))

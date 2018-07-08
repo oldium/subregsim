@@ -11,12 +11,14 @@ import threading
 log = logging.getLogger(__name__)
 
 class Api(object):
-    def __init__(self, username, password, domain):
+    def __init__(self, username, password, domains):
         self.next_id = 1
         self.username = username
         self.password = password
-        self.domain = domain
-        self.db = []
+        self.domains = domains
+        self.db = {}
+        for domain in self.domains:
+            self.db[domain] = []
         self.ssid = None
         self.sn = 1
         self.db_lock = threading.Lock()
@@ -27,26 +29,27 @@ class Api(object):
         zone.append("$TTL 1800")
 
         with self.db_lock:
-            zone.append("{} IN SOA ns.example.com admin.example.com ( {} 86400 900 1209600 1800 )".format(
-                self.domain,
-                self.sn,
-                ))
+            for domain in self.domains:
+                zone.append("{} IN SOA ns.example.com admin.example.com ( {} 86400 900 1209600 1800 )".format(
+                    domain,
+                    self.sn,
+                    ))
 
-            for rr in self.db:
-                name = rr["name"]
-                type = rr["type"]
-                content = rr["content"] if "content" in rr else ""
-                prio = rr["prio"]
-                ttl = rr["ttl"] if rr["ttl"] != 1800 else ""
+                for rr in self.db[domain]:
+                    name = rr["name"]
+                    type = rr["type"]
+                    content = rr["content"] if "content" in rr else ""
+                    prio = rr["prio"]
+                    ttl = rr["ttl"] if rr["ttl"] != 1800 else ""
 
-                if type != "MX":
-                    prio = ""
+                    if type != "MX":
+                        prio = ""
 
-                if type == "TXT":
-                    content = '"{}"'.format(content.replace('"', r'\"'))
+                    if type == "TXT":
+                        content = '"{}"'.format(content.replace('"', r'\"'))
 
-                zone.append("{} {} IN {} {} {}".format(
-                    name, ttl, type, prio, content))
+                    zone.append("{} {} IN {} {} {}".format(
+                        name, ttl, type, prio, content))
 
         return "\n".join(zone)
 
@@ -99,12 +102,12 @@ class Api(object):
             "response": {
                 "status": "ok",
                 "data": {
-                    "count": "1",
+                    "count": len(self.domains),
                     "domains": [{
-                        "name": self.domain,
+                        "name": domain,
                         "expire": "2023-10-20",
                         "autorenew": 0
-                        }]
+                        } for domain in self.domains]
                     }
                 }
             }
@@ -124,7 +127,7 @@ class Api(object):
                     }
                 }
 
-        if domain != self.domain:
+        if domain not in self.domains:
             return {
                 "response": {
                     "status": "error",
@@ -138,13 +141,13 @@ class Api(object):
                     }
                 }
 
-        if len(self.db) > 0:
+        if len(self.db[domain]) > 0:
             return {
                 "response": {
                     "status": "ok",
                     "data": {
                         "domain": domain,
-                        "records": self.db
+                        "records": self.db[domain]
                         }
                     }
                 }
@@ -173,7 +176,7 @@ class Api(object):
                     }
                 }
 
-        if domain != self.domain:
+        if domain not in self.domains:
             return {
                 "response": {
                     "status": "error",
@@ -215,35 +218,35 @@ class Api(object):
                     }
                 }
 
-        if record["type"] == "CNAME" and any(found["name"] == record["name"] and
-                                             found["type"] == record["type"] and
-                                             found["content"] == record["content"] for found in self.db):
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Cannot create CNAME, where another record already exists",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1008
+        with self.db_lock:
+            if record["type"] == "CNAME" and any(found["name"] == record["name"] and
+                                                 found["type"] == record["type"] and
+                                                 found["content"] == record["content"] for found in self.db[domain]):
+                return {
+                    "response": {
+                        "status": "error",
+                        "error": {
+                            "errormsg": "Cannot create CNAME, where another record already exists",
+                            "errorcode": {
+                                "major": 524,
+                                "minor": 1008
+                                }
                             }
                         }
                     }
-                }
 
-        new_record = dict(record)
+            new_record = dict(record)
 
-        new_record["id"] = self.next_id
-        self.next_id += 1
+            new_record["id"] = self.next_id
+            self.next_id += 1
 
-        if 'ttl' not in new_record:
-            new_record['ttl'] = 600
-        if 'prio' not in new_record:
-            new_record['prio'] = 0
+            if 'ttl' not in new_record:
+                new_record['ttl'] = 600
+            if 'prio' not in new_record:
+                new_record['prio'] = 0
 
-        with self.db_lock:
-            self.db.append(new_record)
-            self.sn += 1
+                self.db[domain].append(new_record)
+                self.sn += 1
 
         return {
             "response": {
@@ -266,7 +269,7 @@ class Api(object):
                     }
                 }
 
-        if domain != self.domain:
+        if domain not in self.domains:
             return {
                 "response": {
                     "status": "error",
@@ -309,7 +312,7 @@ class Api(object):
                 }
 
         with self.db_lock:
-            found_items = [item for item in self.db if item["id"] == record["id"]]
+            found_items = [item for item in self.db[domain] if item["id"] == record["id"]]
             if len(found_items) == 0:
                 return {
                     "response": {
@@ -348,7 +351,7 @@ class Api(object):
                     }
                 }
 
-        if domain != self.domain:
+        if domain not in self.domains:
             return {
                 "response": {
                     "status": "error",
@@ -391,9 +394,9 @@ class Api(object):
                 }
 
         with self.db_lock:
-            before_length = len(self.db)
-            self.db = [item for item in self.db if item["id"] != record["id"]]
-            if before_length == len(self.db):
+            before_length = len(self.db[domain])
+            self.db[domain] = [item for item in self.db[domain] if item["id"] != record["id"]]
+            if before_length == len(self.db[domain]):
                 return {
                     "response": {
                         "status": "error",
