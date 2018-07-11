@@ -1,6 +1,6 @@
 # Package requirements
 
 future
-spyne
+git+https://github.com/oldium/spyne.git@fix-binding#egg=spyne
 configargparse
 dnslib

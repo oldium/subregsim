@@ -14,10 +14,6 @@ from wsgiref.simple_server import WSGIServer, WSGIRequestHandler
 
 log = logging.getLogger(__name__)
 
-# `True` means more precise simulation of Subreg.cz API (WSDL presentation),
-# but does not work at the moment... See https://github.com/arskom/spyne/issues/571
-USE_PORT_TYPE = False
-
 class Error_Code(ComplexModel):
     __namespace__ = "http://subreg.cz/wsdl"
     _type_info = [
@@ -178,40 +174,40 @@ class Domains_List_Container(ComplexModel):
     response = Domains_List_Response
 
 class SubregCzService(ServiceBase):
-    __port_types__ = ("SubregCz",) if USE_PORT_TYPE else ()
+    __port_types__ = ("SubregCz",)
 
     @rpc(Unicode, Unicode, _returns=Login_Container, _body_style='out_bare', _operation_name="Login",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def login(ctx, login, password):
         return ctx.app.config["api"].login(login, password)
 
     @rpc(Unicode, _returns=Domains_List_Container, _operation_name="Domains_List",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def domains_list(ctx, ssid):
         return ctx.app.config["api"].domains_list(ssid)
 
     @rpc(Unicode, Unicode, _returns=Get_DNS_Zone_Container, _operation_name="Get_DNS_Zone",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def get_dns_zone(ctx, ssid, domain):
         return ctx.app.config["api"].get_dns_zone(ssid, domain)
 
     @rpc(Unicode, Unicode, Add_DNS_Record_Record, _returns=Add_DNS_Record_Container, _operation_name="Add_DNS_Record",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def add_dns_record(ctx, ssid, domain, record):
         return ctx.app.config["api"].add_dns_record(ssid, domain, record.as_dict())
 
     @rpc(Unicode, Unicode, Modify_DNS_Record_Record, _returns=Modify_DNS_Record_Container, _operation_name="Modify_DNS_Record",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def modify_dns_record(ctx, ssid, domain, record):
         return ctx.app.config["api"].modify_dns_record(ssid, domain, record.as_dict())
 
     @rpc(Unicode, Unicode, Delete_DNS_Record_Record, _returns=Delete_DNS_Record_Container, _operation_name="Delete_DNS_Record",
-         _soap_port_type="SubregCz" if USE_PORT_TYPE else None
+         _soap_port_type="SubregCz"
          )
     def delete_dns_record(ctx, ssid, domain, record):
         return ctx.app.config["api"].delete_dns_record(ssid, domain, record.as_dict())
