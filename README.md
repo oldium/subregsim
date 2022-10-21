@@ -80,7 +80,7 @@ The file `server-certificate.key` is the private key, the file
 Now sign the request with your Certificate Authority:
 
 ```
-openssl x509 -req -in server-certificate.csr -CA test-ca.pem -CAkey test-ca.key -CAcreateserial -out server-certificate.crt -days 1825 -sha256
+openssl x509 -req -in server-certificate.csr -CA test-ca.crt -CAkey test-ca.key -CAcreateserial -out server-certificate.crt -days 1825 -sha256
 ```
 
 The file `server-certificate.crt` (together with `server-certificate.key`) can now be used by the test server.
