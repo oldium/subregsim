@@ -1,37 +1,36 @@
-# Dockerfile for production (sources taken from Git)
-# 1. Build as: docker build -t subregsim:latest .
-# 2. Prepare configuration file and certificates (both optional) - see argument "-c" in next step
-# 3. Run as: docker run --rm -it -v $PWD/server-certificate.crt:/config/server-certificate.crt -v $PWD/server-certificate.key:/config/server-certificate.key -v $PWD/subregsim.conf:/config/subregsim.conf subregsim:latest -c /config/subregsim.conf
+ARG PYTHON_IMAGE=python:3.14-alpine
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
 
-# Base image
-FROM alpine:edge as base
+FROM ${UV_IMAGE} AS uv
+FROM ${PYTHON_IMAGE} AS builder
 
-RUN mkdir /python
-ENV PYTHONUSERBASE=/python
-ENV PATH="$PYTHONUSERBASE/bin:$PATH"
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
 
-RUN apk add --no-cache python3~3.6 py3-openssl
+WORKDIR /app
 
-# Build phase
-FROM base as build
+COPY --from=uv /uv /uvx /bin/
 
-RUN mkdir /build
-WORKDIR /build
+COPY pyproject.toml uv.lock README.md LICENSE.txt ./
+RUN uv sync --locked --no-install-project --no-dev --no-editable
 
-RUN apk add --no-cache git py3-setuptools && \
-	pip3 install --upgrade pip
+COPY subregsim ./subregsim
+RUN uv sync --locked --no-dev --no-editable
 
-RUN git clone -q https://github.com/oldium/subregsim.git && \
-	cd subregsim && \
-	pip3 install --user -r requirements.txt && \
-	pip3 install --user .
+FROM ${PYTHON_IMAGE} AS runtime
 
-# Final phase
-FROM base
+WORKDIR /app
 
 EXPOSE 80 443
 
-COPY --from=build /python /python
+COPY --from=builder /app/.venv /app/.venv
 
-ENTRYPOINT ["/python/bin/subregsim"]
+ENV PATH="/app/.venv/bin:$PATH"
+
+RUN mkdir -p /config
+
+WORKDIR /config
+
+ENTRYPOINT ["subregsim"]
 CMD ["--help"]
