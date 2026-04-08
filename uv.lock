@@ -102,7 +102,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/7d/90/5f80d1c14c89fd882
 
 [[package]]
 name = "subregsim"
-version = "0.5.1"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "configargparse" },
