@@ -1,7 +1,13 @@
 /.project
 /.pydevproject
-/SubregSimulator.egg-info/
+.idea/
+.venv/
+__pycache__/
+*.pyo
 *.pyc
+*.tmp
+*.temp
+*.log
 *.crt
 *.pem
 *.key

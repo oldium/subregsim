@@ -1,0 +1,41 @@
+# Sample configuration; when running in Docker, place this file in /config
+
+# Default simulator user name
+username = username
+
+# Default simulator password
+password = password
+
+# Default simulated domain
+domain = example.com
+
+# Host name or IP address to listen on (use 127.0.0.1 for testing on localhost,
+# or 0.0.0.0 to accept any address for testing with Docker)
+#host = 127.0.0.1
+
+# Port to listen on when in HTTP mode
+#port = 80
+
+# If you want to switch to HTTPS (SSL), uncomment the following line
+#ssl = true
+
+# Port to listen on when in HTTPS (SSL) mode
+#ssl-port = 443
+
+# SSL server certificate in PEM format (may contain private key)
+#ssl-certificate = server-certificate.crt
+
+# SSL server private key in PEM format (not necessary if present in the
+# certificate file)
+#ssl-private-key = server-certificate.key
+
+# If you want to enable simple DNS server serving added records, uncomment the
+# following line
+#dns = true
+
+# DNS server port to listen on
+#dns-port = 53
+
+# DNS server host name or IP address to listen on (use 127.0.0.1 for testing on
+# localhost, or 0.0.0.0 to accept any address for testing with Docker)
+#dns-host = 127.0.0.1
