@@ -29,12 +29,11 @@ def parse_command_line():
 
     web_group = parser.add_argument_group("optional server arguments")
     web_group.add_argument("--host", default="localhost", env_var="SUBREGSIM_HOST", help="server listening host name or IP address (defaults to localhost)")
-    web_group.add_argument("--port", type=int, default=80, env_var="SUBREGSIM_PORT", help="server listening port (defaults to 80)")
-    web_group.add_argument("--url", default="http://localhost:8008/", env_var="SUBREGSIM_URL", help="API root URL for WSDL generation (defaults to http://localhost:8008/)")
+    web_group.add_argument("--port", type=int, default=None, env_var="SUBREGSIM_PORT", help="server listening port (defaults to 80, or 443 with --ssl)")
+    web_group.add_argument("--url", default=None, env_var="SUBREGSIM_URL", help="API root URL for WSDL generation (defaults to a URL built from --host and --port, with http:// or https:// chosen by --ssl)")
 
     ssl_group = parser.add_argument_group("optional SSL arguments")
     ssl_group.add_argument("--ssl", dest="ssl", action="store_true", default=False, env_var="SUBREGSIM_SSL", help="enables SSL on server listening port")
-    ssl_group.add_argument("--ssl-port", dest="ssl_port", type=int, default=443, metavar="PORT", env_var="SUBREGSIM_SSL_PORT", help="server SSL listening port (defaults to 443)")
     ssl_group.add_argument("--ssl-certificate", dest="ssl_certificate", metavar="PEM-FILE", default=None, env_var="SUBREGSIM_SSL_CERTIFICATE", help="specifies server certificate")
     ssl_group.add_argument("--ssl-private-key", dest="ssl_private_key", metavar="PEM-FILE", default=None, env_var="SUBREGSIM_SSL_PRIVATE_KEY", help="specifies server privatey key (not necessary if private key is part of certificate file)")
 
@@ -48,6 +47,13 @@ def parse_command_line():
     if parsed.ssl and ('ssl_certificate' not in parsed or not parsed.ssl_certificate):
         parser.error("--ssl requires --ssl-certificate")
 
+    if parsed.port is None:
+        parsed.port = 443 if parsed.ssl else 80
+
+    if parsed.url is None:
+        scheme = "https" if parsed.ssl else "http"
+        parsed.url = f"{scheme}://{parsed.host}:{parsed.port}/"
+
     return parsed
 
 def main():
@@ -57,9 +63,9 @@ def main():
     api = Api(arguments.username, arguments.password, arguments.domains)
 
     if arguments.ssl:
-        log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.ssl_port))
+        log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.port))
 
-        httpd = ApiHttpServer((arguments.host, arguments.ssl_port), arguments.url, api, arguments.ssl)
+        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, arguments.ssl)
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(arguments.ssl_certificate, arguments.ssl_private_key)
         httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
