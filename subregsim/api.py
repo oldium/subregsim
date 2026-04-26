@@ -245,8 +245,8 @@ class Api(object):
             if 'prio' not in new_record:
                 new_record['prio'] = 0
 
-                self.db[domain].append(new_record)
-                self.sn += 1
+            self.db[domain].append(new_record)
+            self.sn += 1
 
         return {
             "response": {
