@@ -4,11 +4,12 @@ Subreg.cz API simulator suitable for Python lexicon module.
 
 from __future__ import (absolute_import, print_function)
 
-__version__ = "0.5.1"
-
 import configargparse
 import logging
 import ssl
+from importlib.metadata import version as _package_version
+
+__version__ = _package_version("subregsim")
 
 from .api import Api
 from . import dns
@@ -18,9 +19,10 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def parse_command_line():
-    parser = configargparse.ArgumentParser(description="Subreg.cz API simulator suitable for Python lexicon module.")
+    parser = configargparse.ArgumentParser(prog="subregsim", description="Subreg.cz API simulator suitable for Python lexicon module.")
     optional_group = parser.add_argument_group("optional arguments")
     optional_group.add_argument("-c", "--config", metavar="FILE", is_config_file=True, help="configuration file for all options (can be specified only on command-line)")
+    optional_group.add_argument("--version", action="version", version="%(prog)s " + __version__)
     optional_group.add_argument("--domain", dest="domains", action="append", env_var="SUBREGSIM_DOMAIN", default=["example.com"], help="simulated domain name (defaults to example.com); may be repeated on the command-line, or given as a list (e.g. [example.com, example.net]) in the config file or SUBREGSIM_DOMAIN env var")
     optional_group.add_argument("--username", env_var="SUBREGSIM_USERNAME", default="username", help="expected login user name by the server (defaults to username)")
     optional_group.add_argument("--password", env_var="SUBREGSIM_PASSWORD", default="password", help="expected login password by the server (defaults to password)")
