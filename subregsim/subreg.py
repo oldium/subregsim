@@ -68,6 +68,7 @@ if sys.version_info >= (3, 13):
     spyne_six._importer.load_module("spyne.util.six.moves.urllib")
     spyne_six._importer.load_module("spyne.util.six.moves.urllib.parse")
 
+from socketserver import ThreadingMixIn
 from spyne import Application, rpc, ServiceBase, \
     Integer, Unicode
 from spyne.model.complex import ComplexModel
@@ -322,7 +323,9 @@ class ApiApplication(WsgiApplication):
     def handle_wsdl_request(self, req_env, start_response, url):
         return super().handle_wsdl_request(req_env, start_response, self.service_url)
 
-class ApiHttpServer(WSGIServer):
+class ApiHttpServer(ThreadingMixIn, WSGIServer):
+    daemon_threads = True
+
     def __init__(self, server_address, url, api, is_ssl):
         WSGIServer.__init__(self, server_address, WSGIRequestHandler)
         self.is_ssl = is_ssl
