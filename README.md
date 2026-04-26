@@ -50,6 +50,11 @@ The configuration can be supplied in two ways:
 If you do not provide `domain`, `username`, or `password`, the simulator uses
 defaults: `example.com`, `username`, and `password`.
 
+The simulator can serve multiple domains. On the command-line, repeat the
+`--domain` option (e.g. `--domain example.com --domain example.net`). In the
+config file or in the `SUBREGSIM_DOMAIN` environment variable, pass a list,
+for example `[example.com, example.net, example.org]`.
+
 Basic run example with configuration file:
 
 ```

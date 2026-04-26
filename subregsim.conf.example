@@ -6,7 +6,8 @@ username = username
 # Default simulator password
 password = password
 
-# Default simulated domain
+# Default simulated domain. To simulate multiple domains, pass a list,
+# e.g. domain = [example.com, example.net, example.org]
 domain = example.com
 
 # Host name or IP address to listen on (use 127.0.0.1 for testing on localhost,
