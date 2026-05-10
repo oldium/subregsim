@@ -1,6 +1,9 @@
 """REST API for the Subreg.cz simulator: 5 endpoints + Swagger UI + /swagger.json."""
 import functools
 
+from apispec import APISpec
+from apispec.ext.marshmallow import MarshmallowPlugin
+from apispec_webframeworks.flask import FlaskPlugin
 from flask import Flask, jsonify, request
 from marshmallow import ValidationError
 
@@ -31,6 +34,26 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
     @app.route("/domains", methods=["GET"])
     @require_bearer
     def list_domains():
+        """List all domains in your account.
+        ---
+        get:
+          tags: [Domains]
+          operationId: listDomains
+          summary: List all domains in your account.
+          security:
+            - bearer: []
+          responses:
+            '200':
+              description: Command completed successfully
+              content:
+                application/json:
+                  schema: DomainsListResponse
+            '401':
+              description: Missing or incorrect authorization
+              content:
+                application/json:
+                  schema: Error
+        """
         from .schemas import DomainsListResponseSchema
 
         domains = api.list_domains()
@@ -41,6 +64,36 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
     @app.route("/dns/<string:domain>", methods=["GET"])
     @require_bearer
     def get_dns_zone(domain: str):
+        """List of DNS records for specified domain.
+        ---
+        get:
+          tags: [DNS]
+          operationId: getDns
+          summary: List of DNS records for specified domain.
+          security:
+            - bearer: []
+          parameters:
+            - in: path
+              name: domain
+              required: true
+              schema: {type: string, maxLength: 255}
+          responses:
+            '200':
+              description: Command completed successfully
+              content:
+                application/json:
+                  schema: DnsZoneResponse
+            '400':
+              description: An error has occured
+              content:
+                application/json:
+                  schema: Error
+            '401':
+              description: Missing or incorrect authorization
+              content:
+                application/json:
+                  schema: Error
+        """
         from .schemas import DnsZoneResponseSchema
 
         records = api.get_dns_zone(domain)
@@ -49,6 +102,41 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
     @app.route("/dns/<string:domain>/record", methods=["POST"])
     @require_bearer
     def create_dns_record(domain: str):
+        """Add single DNS record to zone.
+        ---
+        post:
+          tags: [DNS]
+          operationId: createDnsRecord
+          summary: Add single DNS record to zone.
+          security:
+            - bearer: []
+          parameters:
+            - in: path
+              name: domain
+              required: true
+              schema: {type: string, maxLength: 255}
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema: CreateRecordRequest
+          responses:
+            '200':
+              description: Command completed successfully
+              content:
+                application/json:
+                  schema: CreateRecordResponse
+            '400':
+              description: An error has occured
+              content:
+                application/json:
+                  schema: Error
+            '401':
+              description: Missing or incorrect authorization
+              content:
+                application/json:
+                  schema: Error
+        """
         from .schemas import CreateRecordRequestSchema, CreateRecordResponseSchema
 
         try:
@@ -60,12 +148,48 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
             CreateRecordResponseSchema().dump({"domain": domain, "record_id": str(rid)})
         )
 
-    @app.route("/dns/<string:domain>/record/<string:record_id>", methods=["PUT"])
+    @app.route("/dns/<string:domain>/record/<string:id>", methods=["PUT"])
     @require_bearer
-    def modify_dns_record(domain: str, record_id: str):
+    def modify_dns_record(domain: str, id: str):
+        """Modify single DNS record in zone.
+        ---
+        put:
+          tags: [DNS]
+          operationId: modifyDnsRecord
+          summary: Modify single DNS record in zone.
+          security:
+            - bearer: []
+          parameters:
+            - in: path
+              name: domain
+              required: true
+              schema: {type: string, maxLength: 255}
+            - in: path
+              name: id
+              required: true
+              schema: {type: string, maxLength: 100, pattern: '^[a-zA-Z0-9]+$'}
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema: ModifyRecordRequest
+          responses:
+            '200':
+              description: Command completed successfully
+            '400':
+              description: An error has occured
+              content:
+                application/json:
+                  schema: Error
+            '401':
+              description: Missing or incorrect authorization
+              content:
+                application/json:
+                  schema: Error
+        """
         from .schemas import ModifyRecordRequestSchema
 
-        rid = _parse_record_id(record_id)
+        rid = _parse_record_id(id)
         try:
             payload = ModifyRecordRequestSchema().load(request.get_json(silent=True) or {})
         except ValidationError as e:
@@ -73,14 +197,92 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
         api.modify_dns_record(domain, rid, payload)
         return jsonify({})
 
-    @app.route("/dns/<string:domain>/record/<string:record_id>", methods=["DELETE"])
+    @app.route("/dns/<string:domain>/record/<string:id>", methods=["DELETE"])
     @require_bearer
-    def delete_dns_record(domain: str, record_id: str):
-        rid = _parse_record_id(record_id)
+    def delete_dns_record(domain: str, id: str):
+        """Remove single DNS record from zone.
+        ---
+        delete:
+          tags: [DNS]
+          operationId: deleteDnsRecord
+          summary: Remove single DNS record from zone.
+          security:
+            - bearer: []
+          parameters:
+            - in: path
+              name: domain
+              required: true
+              schema: {type: string, maxLength: 255}
+            - in: path
+              name: id
+              required: true
+              schema: {type: string, maxLength: 100, pattern: '^[a-zA-Z0-9]+$'}
+          responses:
+            '200':
+              description: Command completed successfully
+            '400':
+              description: An error has occured
+              content:
+                application/json:
+                  schema: Error
+            '401':
+              description: Missing or incorrect authorization
+              content:
+                application/json:
+                  schema: Error
+        """
+        rid = _parse_record_id(id)
         api.delete_dns_record(domain, rid)
         return jsonify({})
 
+    spec = _build_spec(app)
+
+    @app.route("/swagger.json", methods=["GET"])
+    def swagger_json():
+        return jsonify(spec.to_dict())
+
     return app
+
+
+def _build_spec(app: Flask) -> APISpec:
+    """Construct the OpenAPI 3.0 spec for the 5 implemented endpoints."""
+    from .schemas import (
+        CreateRecordRequestSchema,
+        CreateRecordResponseSchema,
+        DnsZoneResponseSchema,
+        DomainsListResponseSchema,
+        ErrorSchema,
+        ModifyRecordRequestSchema,
+    )
+
+    spec = APISpec(
+        title="Subreg.CZ API",
+        version="1",
+        openapi_version="3.0.0",
+        plugins=[FlaskPlugin(), MarshmallowPlugin()],
+    )
+    spec.components.security_scheme("bearer", {"type": "http", "scheme": "bearer"})
+    spec.options["security"] = [{"bearer": []}]
+
+    spec.components.schema("Error", schema=ErrorSchema)
+    spec.components.schema("DomainsListResponse", schema=DomainsListResponseSchema)
+    spec.components.schema("DnsZoneResponse", schema=DnsZoneResponseSchema)
+    spec.components.schema("CreateRecordRequest", schema=CreateRecordRequestSchema)
+    spec.components.schema("CreateRecordResponse", schema=CreateRecordResponseSchema)
+    spec.components.schema("ModifyRecordRequest", schema=ModifyRecordRequestSchema)
+
+    # Register each implemented Flask view with apispec
+    with app.test_request_context():
+        for view_name in (
+            "list_domains",
+            "get_dns_zone",
+            "create_dns_record",
+            "modify_dns_record",
+            "delete_dns_record",
+        ):
+            spec.path(view=app.view_functions[view_name])
+
+    return spec
 
 
 def _error_response(e: ApiError, http_status: int):
