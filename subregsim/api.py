@@ -10,6 +10,25 @@ import threading
 
 log = logging.getLogger(__name__)
 
+
+class ApiError(Exception):
+    """Raised by Api methods to signal a domain-level failure.
+
+    Both transport adapters translate this into their wire format:
+    SOAP wraps as {response: {status: error, error: {errormsg, errorcode: {major, minor}}}}.
+    REST returns HTTP 400 with {error, code_major, code_minor}.
+    """
+
+    def __init__(self, major: int, minor: int, message: str) -> None:
+        super().__init__(message)
+        self.major = major
+        self.minor = minor
+        self.message = message
+
+    def __str__(self) -> str:
+        return f"ApiError({self.major}, {self.minor}): {self.message}"
+
+
 class Api(object):
     def __init__(self, username, password, domains):
         self.next_id = 1
