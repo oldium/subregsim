@@ -213,3 +213,30 @@ def test_delete_record_non_numeric_id_returns_400_524_1003(client):
     body = resp.get_json()
     assert body["code_major"] == 524
     assert body["code_minor"] == 1003
+
+
+def test_swagger_ui_at_root_returns_html(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["Content-Type"]
+    assert b"swagger" in resp.data.lower()
+
+
+def test_swagger_ui_assets_served(client):
+    resp = client.get("/swagger-ui-bundle.js")
+    assert resp.status_code == 200
+    assert "javascript" in resp.headers["Content-Type"].lower()
+
+
+def test_rest_routes_take_precedence_over_swagger_ui_catchall(client):
+    # /domains is a literal route; must hit our handler, not the catch-all.
+    resp = client.get("/domains", headers={"Authorization": "Bearer secret-token"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "domains" in body and "count" in body
+
+
+def test_root_swagger_ui_does_not_require_bearer(client):
+    # Browser users have no Bearer; the docs must be reachable anonymously.
+    resp = client.get("/")
+    assert resp.status_code == 200

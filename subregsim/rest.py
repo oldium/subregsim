@@ -5,6 +5,7 @@ from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
 from flask import Flask, jsonify, request
+from flask_swagger_ui import get_swaggerui_blueprint
 from marshmallow import ValidationError
 
 from .api import Api, ApiError
@@ -240,6 +241,13 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
     @app.route("/swagger.json", methods=["GET"])
     def swagger_json():
         return jsonify(spec.to_dict())
+
+    swagger_ui_blueprint = get_swaggerui_blueprint(
+        base_url="/",
+        api_url="/swagger.json",
+        config={"app_name": "Subreg.cz API Simulator"},
+    )
+    app.register_blueprint(swagger_ui_blueprint)
 
     return app
 
