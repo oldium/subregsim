@@ -28,6 +28,11 @@ dependencies = [
   "dnslib>=0.9.26",
   "lxml>=6.0.2",
   "spyne>=2.14.0",
+  "flask>=3.1,<4",
+  "marshmallow>=4.0,<5",
+  "apispec>=6.10,<7",
+  "apispec-webframeworks>=1.2,<2",
+  "flask-swagger-ui>=5.0,<6",
 ]
 
 [dependency-groups]
