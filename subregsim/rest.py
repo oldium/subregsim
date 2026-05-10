@@ -60,6 +60,19 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
             CreateRecordResponseSchema().dump({"domain": domain, "record_id": str(rid)})
         )
 
+    @app.route("/dns/<string:domain>/record/<string:record_id>", methods=["PUT"])
+    @require_bearer
+    def modify_dns_record(domain: str, record_id: str):
+        from .schemas import ModifyRecordRequestSchema
+
+        rid = _parse_record_id(record_id)
+        try:
+            payload = ModifyRecordRequestSchema().load(request.get_json(silent=True) or {})
+        except ValidationError as e:
+            _raise_from_validation(e)
+        api.modify_dns_record(domain, rid, payload)
+        return jsonify({})
+
     return app
 
 
@@ -83,3 +96,12 @@ def _raise_from_validation(err: ValidationError) -> None:
         if field in messages:
             raise ApiError(major, minor, msg)
     raise ApiError(400, 0, str(err.messages))
+
+
+def _parse_record_id(raw: str) -> int:
+    """Parse a record id from path. The upstream swagger restricts it to ^[a-zA-Z0-9]+$
+    but the simulator only knows integer IDs, so non-numeric is treated as 'not found'."""
+    try:
+        return int(raw)
+    except ValueError:
+        raise ApiError(524, 1003, "Record does not exist")

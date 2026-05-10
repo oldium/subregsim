@@ -129,3 +129,53 @@ def test_create_record_unknown_domain_returns_400_524_1009(client):
     body = resp.get_json()
     assert body["code_major"] == 524
     assert body["code_minor"] == 1009
+
+
+def test_modify_record_updates_existing(client, api):
+    rid = api.add_dns_record(
+        "example.com", {"name": "www", "type": "A", "content": "1.2.3.4"}
+    )
+    resp = client.put(
+        f"/dns/example.com/record/{rid}",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "A", "content": "5.6.7.8"},
+    )
+    assert resp.status_code == 200
+    rec = api.get_dns_zone("example.com")[0]
+    assert rec["content"] == "5.6.7.8"
+
+
+def test_modify_record_unknown_id_returns_400_524_1003(client):
+    resp = client.put(
+        "/dns/example.com/record/99999",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1003
+
+
+def test_modify_record_non_numeric_id_returns_400_524_1003(client):
+    resp = client.put(
+        "/dns/example.com/record/abc",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1003
+
+
+def test_modify_record_unknown_domain_returns_400_524_1009(client):
+    resp = client.put(
+        "/dns/not-configured.tld/record/1",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1009
