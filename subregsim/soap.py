@@ -76,6 +76,8 @@ from spyne.protocol.soap import Soap11
 from spyne.server.wsgi import WsgiApplication
 from wsgiref.simple_server import WSGIServer, WSGIRequestHandler
 
+from .api import ApiError
+
 log = logging.getLogger(__name__)
 
 RequiredInteger = Integer.customize(nillable=False, min_occurs=1)
@@ -245,6 +247,29 @@ class Domains_List_Container(ComplexModel):
 class SubregCzService(ServiceBase):
     __port_types__ = ("SubregCz",)
 
+    # ---- Helper: wrap api/auth output into the SOAP {response} envelope ----
+    @staticmethod
+    def _ok(data=None):
+        out = {"status": "ok"}
+        if data is not None:
+            out["data"] = data
+        return {"response": out}
+
+    @staticmethod
+    def _err(major, minor, message):
+        return {
+            "response": {
+                "status": "error",
+                "error": {
+                    "errormsg": message,
+                    "errorcode": {"major": major, "minor": minor},
+                },
+            }
+        }
+
+    # ---- @rpc methods ----
+    # NOTE: @rpc decorators below MUST stay byte-identical to today to keep WSDL stable.
+
     # Method names use the real subreg.cz operation casing (Login, Get_DNS_Zone…)
     # so that spyne picks them up as the wsdl:operation name. _in_message_name /
     # _out_message_name carry an explicit namespace so the request/response body
@@ -258,7 +283,12 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Login(ctx, login, password):
-        return ctx.app.config["api"].login(login, password)
+        cfg = ctx.app.config
+        try:
+            ssid = cfg["session"].login(login, password)
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        return SubregCzService._ok({"ssid": ssid})
 
     @rpc(RequiredUnicode, _returns=Domains_List_Container,
          _body_style='out_bare',
@@ -267,7 +297,13 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Domains_List(ctx, ssid):
-        return ctx.app.config["api"].domains_list(ssid)
+        cfg = ctx.app.config
+        try:
+            cfg["session"].validate(ssid)
+            domains = cfg["api"].list_domains()
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        return SubregCzService._ok({"count": len(domains), "domains": domains})
 
     @rpc(RequiredUnicode, RequiredUnicode, _returns=Get_DNS_Zone_Container,
          _body_style='out_bare',
@@ -276,7 +312,16 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Get_DNS_Zone(ctx, ssid, domain):
-        return ctx.app.config["api"].get_dns_zone(ssid, domain)
+        cfg = ctx.app.config
+        try:
+            cfg["session"].validate(ssid)
+            records = cfg["api"].get_dns_zone(domain)
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        data = {"domain": domain}
+        if records:
+            data["records"] = records
+        return SubregCzService._ok(data)
 
     @rpc(RequiredUnicode, RequiredUnicode, Add_DNS_Record_Record.customize(nillable=False, min_occurs=1),
          _returns=Add_DNS_Record_Container,
@@ -286,7 +331,13 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Add_DNS_Record(ctx, ssid, domain, record):
-        return ctx.app.config["api"].add_dns_record(ssid, domain, record.as_dict())
+        cfg = ctx.app.config
+        try:
+            cfg["session"].validate(ssid)
+            cfg["api"].add_dns_record(domain, record.as_dict())
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        return SubregCzService._ok()
 
     @rpc(RequiredUnicode, RequiredUnicode, Modify_DNS_Record_Record.customize(nillable=False, min_occurs=1),
          _returns=Modify_DNS_Record_Container,
@@ -296,7 +347,17 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Modify_DNS_Record(ctx, ssid, domain, record):
-        return ctx.app.config["api"].modify_dns_record(ssid, domain, record.as_dict())
+        cfg = ctx.app.config
+        try:
+            cfg["session"].validate(ssid)
+            rec = record.as_dict()
+            rid = rec.pop("id", None)
+            if rid is None:
+                raise ApiError(524, 1002, "Missing or empty value for record ID")
+            cfg["api"].modify_dns_record(domain, rid, rec)
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        return SubregCzService._ok()
 
     @rpc(RequiredUnicode, RequiredUnicode, Delete_DNS_Record_Record.customize(nillable=False, min_occurs=1),
          _returns=Delete_DNS_Record_Container,
@@ -306,7 +367,17 @@ class SubregCzService(ServiceBase):
          _port_type="SubregCz"
          )
     def Delete_DNS_Record(ctx, ssid, domain, record):
-        return ctx.app.config["api"].delete_dns_record(ssid, domain, record.as_dict())
+        cfg = ctx.app.config
+        try:
+            cfg["session"].validate(ssid)
+            rec = record.as_dict()
+            rid = rec.get("id")
+            if rid is None:
+                raise ApiError(524, 1002, "Missing or empty value for record ID")
+            cfg["api"].delete_dns_record(domain, rid)
+        except ApiError as e:
+            return SubregCzService._err(e.major, e.minor, e.message)
+        return SubregCzService._ok()
 
 class ApiApplication(WsgiApplication):
     def __init__(self, app, service_url):
@@ -326,7 +397,7 @@ class ApiApplication(WsgiApplication):
 class ApiHttpServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
 
-    def __init__(self, server_address, url, api, is_ssl):
+    def __init__(self, server_address, url, api, session, is_ssl):
         WSGIServer.__init__(self, server_address, WSGIRequestHandler)
         self.is_ssl = is_ssl
 
@@ -337,7 +408,7 @@ class ApiHttpServer(ThreadingMixIn, WSGIServer):
                                 'SubregCzService',
                                 in_protocol=Soap11(),
                                 out_protocol=Soap11(),
-                                config={"api":api})
+                                config={"api": api, "session": session})
 
         # Spyne keys service_method_map by {Application.tns}method.name, so it
         # only matches incoming requests whose body element lives in the same

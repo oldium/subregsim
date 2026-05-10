@@ -12,8 +12,9 @@ from importlib.metadata import version as _package_version
 __version__ = _package_version("subregsim")
 
 from .api import Api
+from .auth import SoapSession
 from . import dns
-from .subreg import ApiHttpServer
+from .soap import ApiHttpServer
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -60,18 +61,19 @@ def main():
 
     arguments = parse_command_line()
 
-    api = Api(arguments.username, arguments.password, arguments.domains)
+    api = Api(arguments.domains)
+    session = SoapSession(arguments.username, arguments.password)
 
     if arguments.ssl:
         log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.port))
 
-        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, arguments.ssl)
+        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, session, arguments.ssl)
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(arguments.ssl_certificate, arguments.ssl_private_key)
         httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
     else:
         log.info("Starting HTTP server to listen on {}:{}...".format(arguments.host, arguments.port))
-        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, arguments.ssl)
+        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, session, arguments.ssl)
 
     if arguments.dns:
         log.info("Starting DNS server to listen on {}:{}...".format(arguments.dns_host, arguments.dns_port))

@@ -1,23 +1,21 @@
-'''
-Subreg.cz API simulator suitable for Python lexicon module.
-'''
+"""Subreg.cz simulator domain core (transport-agnostic).
 
-from __future__ import (absolute_import, print_function)
+Methods return plain Python data on success and raise `ApiError(major, minor, message)`
+on failure. Both SOAP and REST adapters translate this into their wire formats.
+"""
 import logging
-import random
-import string
 import threading
+from typing import Any
 
 log = logging.getLogger(__name__)
 
+_VALID_RECORD_TYPES = frozenset(
+    ["A", "AAAA", "CNAME", "MX", "TXT", "SPF", "SRV", "NS", "TLSA", "CAA", "SSHFP"]
+)
+
 
 class ApiError(Exception):
-    """Raised by Api methods to signal a domain-level failure.
-
-    Both transport adapters translate this into their wire format:
-    SOAP wraps as {response: {status: error, error: {errormsg, errorcode: {major, minor}}}}.
-    REST returns HTTP 400 with {error, code_major, code_minor}.
-    """
+    """Raised by Api methods to signal a domain-level failure."""
 
     def __init__(self, major: int, minor: int, message: str) -> None:
         super().__init__(message)
@@ -29,410 +27,104 @@ class ApiError(Exception):
         return f"ApiError({self.major}, {self.minor}): {self.message}"
 
 
-class Api(object):
-    def __init__(self, username, password, domains):
-        self.next_id = 1
-        self.username = username
-        self.password = password
-        self.domains = domains
-        self.db = {}
-        for domain in self.domains:
-            self.db[domain] = []
-        self.ssid = None
-        self.sn = 1
-        self.db_lock = threading.Lock()
+class Api:
+    """In-memory domain/zone store.
 
-    def toZone(self):
-        zone = []
-        zone.append("$ORIGIN .")
-        zone.append("$TTL 1800")
+    Stores DNS records per configured domain, assigns incrementing integer IDs,
+    and tracks a serial number for the DNS zone view. Thread-safe writes.
+    """
 
-        with self.db_lock:
-            for domain in self.domains:
-                zone.append("{} IN SOA ns.example.com admin.example.com ( {} 86400 900 1209600 1800 )".format(
-                    domain,
-                    self.sn,
-                    ))
+    def __init__(self, domains: list[str]) -> None:
+        self._domains = list(domains)
+        self._db: dict[str, list[dict[str, Any]]] = {d: [] for d in self._domains}
+        self._next_id = 1
+        self._serial = 1
+        self._lock = threading.Lock()
 
-                for rr in self.db[domain]:
-                    name = rr["name"]
-                    type = rr["type"]
-                    content = rr["content"] if "content" in rr else ""
-                    prio = rr["prio"]
-                    ttl = rr["ttl"] if rr["ttl"] != 1800 else ""
+    @property
+    def domains(self) -> list[str]:
+        return list(self._domains)
 
-                    if type != "MX":
-                        prio = ""
+    @property
+    def serial(self) -> int:
+        return self._serial
 
-                    if type == "TXT":
-                        content = '"{}"'.format(content.replace('"', r'\"'))
+    def list_domains(self) -> list[dict[str, Any]]:
+        return [
+            {"name": d, "expire": "2023-10-20", "autorenew": 0} for d in self._domains
+        ]
 
-                    zone.append("{} {} IN {} {} {}".format(
-                        name, ttl, type, prio, content))
+    def get_dns_zone(self, domain: str) -> list[dict[str, Any]]:
+        self._require_domain(domain)
+        return [dict(r) for r in self._db[domain]]
 
-        return "\n".join(zone)
-
-    def login(self, login, password):
-        log.info("Login: {}/{}".format(login, password))
-
-        self.ssid = None
-
-        if login != self.username or password != self.password:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Incorrect login or password",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 104
-                            }
-                        }
-                    }
-                }
-
-        self.ssid = "".join(random.SystemRandom().choice(string.digits + string.ascii_lowercase) for _ in range(32))
-
-        return {
-            "response": {
-                "status": "ok",
-                "data": {
-                    "ssid": self.ssid
-                    }
-                }
-            }
-
-    def domains_list(self, ssid):
-        if ssid != self.ssid:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "You are not logged",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 101
-                            }
-                        }
-                    }
-                }
-
-        return {
-            "response": {
-                "status": "ok",
-                "data": {
-                    "count": len(self.domains),
-                    "domains": [{
-                        "name": domain,
-                        "expire": "2023-10-20",
-                        "autorenew": 0
-                        } for domain in self.domains]
-                    }
-                }
-            }
-
-    def get_dns_zone(self, ssid, domain):
-        if ssid != self.ssid:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "You are not logged",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 101
-                            }
-                        }
-                    }
-                }
-
-        if domain not in self.domains:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Invalid domain",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1009
-                            }
-                        }
-                    }
-                }
-
-        if len(self.db[domain]) > 0:
-            return {
-                "response": {
-                    "status": "ok",
-                    "data": {
-                        "domain": domain,
-                        "records": self.db[domain]
-                        }
-                    }
-                }
-        else:
-            return {
-                "response": {
-                    "status": "ok",
-                    "data": {
-                        "domain": domain
-                        }
-                    }
-                }
-
-    def add_dns_record(self, ssid, domain, record):
-        if ssid != self.ssid:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "You are not logged",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 101
-                            }
-                        }
-                    }
-                }
-
-        if domain not in self.domains:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Invalid domain",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1009
-                            }
-                        }
-                    }
-                }
-
-        if record.get("type", None) not in ["A", "AAAA", "CNAME", "MX", "TXT", "SPF", "SRV", "NS", "TLSA", "CAA", "SSHFP"]:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Unknown record type",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1007
-                            }
-                        }
-                    }
-                }
-
+    def add_dns_record(self, domain: str, record: dict[str, Any]) -> int:
+        self._require_domain(domain)
+        rtype = record.get("type")
+        if rtype not in _VALID_RECORD_TYPES:
+            raise ApiError(524, 1007, "Unknown record type")
         if "name" not in record:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Invalid domain name in record",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1006
-                            }
-                        }
-                    }
-                }
-
-        with self.db_lock:
-            if record["type"] == "CNAME" and any(found["name"] == record["name"] and
-                                                 found["type"] == record["type"] and
-                                                 found["content"] == record["content"] for found in self.db[domain]):
-                return {
-                    "response": {
-                        "status": "error",
-                        "error": {
-                            "errormsg": "Cannot create CNAME, where another record already exists",
-                            "errorcode": {
-                                "major": 524,
-                                "minor": 1008
-                                }
-                            }
-                        }
-                    }
-
+            raise ApiError(524, 1006, "Invalid domain name in record")
+        with self._lock:
+            if rtype == "CNAME" and any(
+                r["name"] == record["name"]
+                and r["type"] == "CNAME"
+                and r.get("content") == record.get("content")
+                for r in self._db[domain]
+            ):
+                raise ApiError(
+                    524, 1008, "Cannot create CNAME, where another record already exists"
+                )
             new_record = dict(record)
+            new_record["id"] = self._next_id
+            self._next_id += 1
+            new_record.setdefault("ttl", 600)
+            new_record.setdefault("prio", 0)
+            self._db[domain].append(new_record)
+            self._serial += 1
+            return new_record["id"]
 
-            new_record["id"] = self.next_id
-            self.next_id += 1
+    def modify_dns_record(
+        self, domain: str, record_id: int, record: dict[str, Any]
+    ) -> None:
+        self._require_domain(domain)
+        if "type" in record and record["type"] not in _VALID_RECORD_TYPES:
+            raise ApiError(524, 1007, "Unknown record type")
+        with self._lock:
+            matches = [r for r in self._db[domain] if r["id"] == record_id]
+            if not matches:
+                raise ApiError(524, 1003, "Record does not exist")
+            matches[0].update(record)
+            self._serial += 1
 
-            if 'ttl' not in new_record:
-                new_record['ttl'] = 600
-            if 'prio' not in new_record:
-                new_record['prio'] = 0
+    def delete_dns_record(self, domain: str, record_id: int) -> None:
+        self._require_domain(domain)
+        with self._lock:
+            before = len(self._db[domain])
+            self._db[domain] = [r for r in self._db[domain] if r["id"] != record_id]
+            if len(self._db[domain]) == before:
+                raise ApiError(524, 1003, "Record does not exist")
+            self._serial += 1
 
-            self.db[domain].append(new_record)
-            self.sn += 1
+    def to_zone(self) -> str:
+        lines = ["$ORIGIN .", "$TTL 1800"]
+        with self._lock:
+            for domain in self._domains:
+                lines.append(
+                    f"{domain} IN SOA ns.example.com admin.example.com "
+                    f"( {self._serial} 86400 900 1209600 1800 )"
+                )
+                for rr in self._db[domain]:
+                    name = rr["name"]
+                    rtype = rr["type"]
+                    content = rr.get("content", "")
+                    prio = rr["prio"] if rtype == "MX" else ""
+                    ttl = rr["ttl"] if rr["ttl"] != 1800 else ""
+                    if rtype == "TXT":
+                        content = '"{}"'.format(content.replace('"', r"\""))
+                    lines.append(f"{name} {ttl} IN {rtype} {prio} {content}")
+        return "\n".join(lines)
 
-        return {
-            "response": {
-                "status": "ok"
-                }
-            }
-
-    def modify_dns_record(self, ssid, domain, record):
-        if ssid != self.ssid:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "You are not logged",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 101
-                            }
-                        }
-                    }
-                }
-
-        if domain not in self.domains:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Invalid domain",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1009
-                            }
-                        }
-                    }
-                }
-
-        if "id" not in record:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Missing or empty value for record ID",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1002
-                            }
-                        }
-                    }
-                }
-
-        if "type" in record and record["type"] not in ["A", "AAAA", "CNAME", "MX", "TXT", "SPF", "SRV", "NS", "TLSA", "CAA", "SSHFP"]:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Unknown record type",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1007
-                            }
-                        }
-                    }
-                }
-
-        with self.db_lock:
-            found_items = [item for item in self.db[domain] if item["id"] == record["id"]]
-            if len(found_items) == 0:
-                return {
-                    "response": {
-                        "status": "error",
-                        "error": {
-                            "errormsg": "Record does not exist",
-                            "errorcode": {
-                                "major": 524,
-                                "minor": 1003
-                                }
-                            }
-                        }
-                    }
-
-            found_items[0].update(record)
-            self.sn += 1
-
-        return {
-            "response": {
-                "status": "ok"
-                }
-            }
-
-    def delete_dns_record(self, ssid, domain, record):
-        if ssid != self.ssid:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "You are not logged",
-                        "errorcode": {
-                            "major": 500,
-                            "minor": 101
-                            }
-                        }
-                    }
-                }
-
-        if domain not in self.domains:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Invalid domain",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1009
-                            }
-                        }
-                    }
-                }
-
-        if "id" not in record:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Missing or empty value for record ID",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1002
-                            }
-                        }
-                    }
-                }
-
-        if "type" in record and record["type"] not in ["A", "AAAA", "CNAME", "MX", "TXT", "SPF", "SRV", "NS", "TLSA", "CAA", "SSHFP"]:
-            return {
-                "response": {
-                    "status": "error",
-                    "error": {
-                        "errormsg": "Unknown record type",
-                        "errorcode": {
-                            "major": 524,
-                            "minor": 1007
-                            }
-                        }
-                    }
-                }
-
-        with self.db_lock:
-            before_length = len(self.db[domain])
-            self.db[domain] = [item for item in self.db[domain] if item["id"] != record["id"]]
-            if before_length == len(self.db[domain]):
-                return {
-                    "response": {
-                        "status": "error",
-                        "error": {
-                            "errormsg": "Record does not exist",
-                            "errorcode": {
-                                "major": 524,
-                                "minor": 1003
-                                }
-                            }
-                        }
-                    }
-
-            self.sn += 1
-
-        return {
-            "response": {
-                "status": "ok"
-                }
-            }
+    def _require_domain(self, domain: str) -> None:
+        if domain not in self._db:
+            raise ApiError(524, 1009, "Invalid domain")

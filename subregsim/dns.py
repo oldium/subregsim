@@ -15,7 +15,7 @@ class ApiDnsResolver(dnslib.server.BaseResolver):
         self.api = api
 
     def resolve(self, request, handler):
-        resolver = dnslib.zoneresolver.ZoneResolver(self.api.toZone(), True)
+        resolver = dnslib.zoneresolver.ZoneResolver(self.api.to_zone(), True)
         return resolver.resolve(request, handler)
 
 class ApiDns(dnslib.server.DNSServer):
