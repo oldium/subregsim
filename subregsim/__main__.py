@@ -12,9 +12,9 @@ from importlib.metadata import version as _package_version
 __version__ = _package_version("subregsim")
 
 from .api import Api
-from .auth import SoapSession
+from .auth import BearerAuth, SoapSession
 from . import dns
-from .soap import ApiHttpServer
+from .server import build_server
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +27,8 @@ def parse_command_line():
     optional_group.add_argument("--domain", dest="domains", action="append", env_var="SUBREGSIM_DOMAIN", default=["example.com"], help="simulated domain name (defaults to example.com); may be repeated on the command-line, or given as a list (e.g. [example.com, example.net]) in the config file or SUBREGSIM_DOMAIN env var")
     optional_group.add_argument("--username", env_var="SUBREGSIM_USERNAME", default="username", help="expected login user name by the server (defaults to username)")
     optional_group.add_argument("--password", env_var="SUBREGSIM_PASSWORD", default="password", help="expected login password by the server (defaults to password)")
+    optional_group.add_argument("--token", env_var="SUBREGSIM_TOKEN", default="token",
+                                help="expected REST API bearer token (defaults to 'token')")
 
     web_group = parser.add_argument_group("optional server arguments")
     web_group.add_argument("--host", default="localhost", env_var="SUBREGSIM_HOST", help="server listening host name or IP address (defaults to localhost)")
@@ -58,29 +60,38 @@ def parse_command_line():
     return parsed
 
 def main():
-
     arguments = parse_command_line()
 
     api = Api(arguments.domains)
     session = SoapSession(arguments.username, arguments.password)
+    bearer = BearerAuth(arguments.token)
 
     if arguments.ssl:
-        log.info("Starting HTTPS server to listen on {}:{}...".format(arguments.host, arguments.port))
+        log.info("Starting HTTPS server to listen on %s:%s...",
+                 arguments.host, arguments.port)
+    else:
+        log.info("Starting HTTP server to listen on %s:%s...",
+                 arguments.host, arguments.port)
+    log.info("  SOAP:        POST  %s   (WSDL at %swsdl)",
+             arguments.url, arguments.url)
+    log.info("  REST:        GET   %sdomains, %sdns/...", arguments.url, arguments.url)
+    log.info("  Swagger UI:  GET   %s   (spec at %sswagger.json)",
+             arguments.url, arguments.url)
 
-        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, session, arguments.ssl)
+    httpd = build_server(arguments.host, arguments.port, arguments.url,
+                         api, session, bearer, arguments.ssl)
+
+    if arguments.ssl:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(arguments.ssl_certificate, arguments.ssl_private_key)
         httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
-    else:
-        log.info("Starting HTTP server to listen on {}:{}...".format(arguments.host, arguments.port))
-        httpd = ApiHttpServer((arguments.host, arguments.port), arguments.url, api, session, arguments.ssl)
 
     if arguments.dns:
-        log.info("Starting DNS server to listen on {}:{}...".format(arguments.dns_host, arguments.dns_port))
+        log.info("Starting DNS server to listen on %s:%s...",
+                 arguments.dns_host, arguments.dns_port)
         api_resolver = dns.ApiDnsResolver(api)
         dns_udp = dns.ApiDns(api_resolver, arguments.dns_host, arguments.dns_port, False)
         dns_tcp = dns.ApiDns(api_resolver, arguments.dns_host, arguments.dns_port, True)
-
         dns_udp.start_thread()
         dns_tcp.start_thread()
 
@@ -89,17 +100,17 @@ def main():
     except KeyboardInterrupt:
         log.info("Terminating...")
     except Exception as e:
-        log.exception(f"Error running HTTP{'S' if arguments.ssl else ''} server", e)
+        log.exception("Error running HTTP%s server: %s",
+                      "S" if arguments.ssl else "", e)
     finally:
         try:
             httpd.server_close()
-        except:
+        except Exception:
             pass
 
         if arguments.dns:
             dns_udp.stop()
             dns_tcp.stop()
-
             dns_udp.thread.join()
             dns_tcp.thread.join()
 

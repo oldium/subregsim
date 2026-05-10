@@ -68,13 +68,11 @@ if sys.version_info >= (3, 13):
     spyne_six._importer.load_module("spyne.util.six.moves.urllib")
     spyne_six._importer.load_module("spyne.util.six.moves.urllib.parse")
 
-from socketserver import ThreadingMixIn
 from spyne import Application, rpc, ServiceBase, \
     Integer, Unicode
 from spyne.model.complex import ComplexModel
 from spyne.protocol.soap import Soap11
 from spyne.server.wsgi import WsgiApplication
-from wsgiref.simple_server import WSGIServer, WSGIRequestHandler
 
 from .api import ApiError
 
@@ -420,44 +418,3 @@ def build_spyne_wsgi(api, session, service_url: str):
                     aliases.append(method)
 
     return ApiApplication(spyne_app, service_url)
-
-class ApiHttpServer(ThreadingMixIn, WSGIServer):
-    daemon_threads = True
-
-    def __init__(self, server_address, url, api, session, is_ssl):
-        WSGIServer.__init__(self, server_address, WSGIRequestHandler)
-        self.is_ssl = is_ssl
-
-        if self.is_ssl:
-            self.base_environ["HTTPS"] = "yes"
-
-        spyne_app = Application([SubregCzService], 'http://subreg.cz/wsdl',
-                                'SubregCzService',
-                                in_protocol=Soap11(),
-                                out_protocol=Soap11(),
-                                config={"api": api, "session": session})
-
-        # Spyne keys service_method_map by {Application.tns}method.name, so it
-        # only matches incoming requests whose body element lives in the same
-        # namespace as the WSDL service. The real subreg.cz WSDL splits the
-        # namespaces (service in http://subreg.cz/wsdl, request elements in
-        # http://subreg.cz/types). Register each method under the body
-        # element's namespace as an alias so the dispatcher resolves both.
-        for method_list in list(spyne_app.interface.service_method_map.values()):
-            for method in method_list:
-                in_ns = method.in_message.get_namespace()
-                if in_ns and in_ns != spyne_app.tns:
-                    alias_key = "{%s}%s" % (in_ns, method.name)
-                    aliases = spyne_app.interface.service_method_map.setdefault(alias_key, [])
-                    if method not in aliases:
-                        aliases.append(method)
-
-        app = ApiApplication(spyne_app, url)
-
-        self.set_app(app)
-
-    def handle_error(self, _request, client_address):
-        if self.is_ssl:
-            log.exception("HTTPS request handling from {} failed".format(client_address[0]))
-        else:
-            log.exception("HTTP request handling from {} failed".format(client_address[0]))
