@@ -12,3 +12,6 @@ __pycache__/
 *.pem
 *.key
 subregsim.conf
+
+# Superpowers harness docs (specs, plans) — kept on disk locally, not in tree
+docs/superpowers/
