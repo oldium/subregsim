@@ -63,6 +63,33 @@ subregsim -c subregsim.conf
 
 The simulator currently uses the Spyne-based SOAP server implementation.
 
+### REST API
+
+In addition to the SOAP API, the simulator exposes a REST API mirroring the
+implemented SOAP methods, served on the same host/port. Authentication is via
+an HTTP Bearer token configured at startup (`--token`, default `token`).
+
+| SOAP method        | REST endpoint                            |
+| ------------------ | ---------------------------------------- |
+| Domains_List       | `GET  /domains`                          |
+| Get_DNS_Zone       | `GET  /dns/{domain}`                     |
+| Add_DNS_Record     | `POST /dns/{domain}/record`              |
+| Modify_DNS_Record  | `PUT  /dns/{domain}/record/{id}`         |
+| Delete_DNS_Record  | `DELETE /dns/{domain}/record/{id}`       |
+
+Swagger UI is served at `/` and the OpenAPI 3.0 spec at `/swagger.json`. Open
+`http://localhost/` in a browser to explore the documented surface.
+
+Example with the defaults:
+
+```
+curl -H "Authorization: Bearer token" http://localhost/domains
+```
+
+The token can be overridden on the command line (`--token mytoken`), via the
+config file (`token = mytoken`), or with the `SUBREGSIM_TOKEN` environment
+variable.
+
 ### SSL Setup
 
 #### Local Certificate Authority
