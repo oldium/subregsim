@@ -37,6 +37,14 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
             DomainsListResponseSchema().dump({"domains": domains, "count": len(domains)})
         )
 
+    @app.route("/dns/<string:domain>", methods=["GET"])
+    @require_bearer
+    def get_dns_zone(domain: str):
+        from .schemas import DnsZoneResponseSchema
+
+        records = api.get_dns_zone(domain)
+        return jsonify(DnsZoneResponseSchema().dump({"domain": domain, "records": records}))
+
     return app
 
 
