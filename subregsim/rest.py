@@ -73,6 +73,13 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
         api.modify_dns_record(domain, rid, payload)
         return jsonify({})
 
+    @app.route("/dns/<string:domain>/record/<string:record_id>", methods=["DELETE"])
+    @require_bearer
+    def delete_dns_record(domain: str, record_id: str):
+        rid = _parse_record_id(record_id)
+        api.delete_dns_record(domain, rid)
+        return jsonify({})
+
     return app
 
 

@@ -179,3 +179,37 @@ def test_modify_record_unknown_domain_returns_400_524_1009(client):
     body = resp.get_json()
     assert body["code_major"] == 524
     assert body["code_minor"] == 1009
+
+
+def test_delete_record_removes_it(client, api):
+    rid = api.add_dns_record(
+        "example.com", {"name": "www", "type": "A", "content": "1.2.3.4"}
+    )
+    resp = client.delete(
+        f"/dns/example.com/record/{rid}",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert resp.status_code == 200
+    assert api.get_dns_zone("example.com") == []
+
+
+def test_delete_record_unknown_id_returns_400_524_1003(client):
+    resp = client.delete(
+        "/dns/example.com/record/99999",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1003
+
+
+def test_delete_record_non_numeric_id_returns_400_524_1003(client):
+    resp = client.delete(
+        "/dns/example.com/record/abc",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1003
