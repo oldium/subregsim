@@ -2,6 +2,7 @@
 import functools
 
 from flask import Flask, jsonify, request
+from marshmallow import ValidationError
 
 from .api import Api, ApiError
 from .auth import BearerAuth
@@ -45,6 +46,20 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
         records = api.get_dns_zone(domain)
         return jsonify(DnsZoneResponseSchema().dump({"domain": domain, "records": records}))
 
+    @app.route("/dns/<string:domain>/record", methods=["POST"])
+    @require_bearer
+    def create_dns_record(domain: str):
+        from .schemas import CreateRecordRequestSchema, CreateRecordResponseSchema
+
+        try:
+            payload = CreateRecordRequestSchema().load(request.get_json(silent=True) or {})
+        except ValidationError as e:
+            _raise_from_validation(e)
+        rid = api.add_dns_record(domain, payload)
+        return jsonify(
+            CreateRecordResponseSchema().dump({"domain": domain, "record_id": str(rid)})
+        )
+
     return app
 
 
@@ -52,3 +67,19 @@ def _error_response(e: ApiError, http_status: int):
     return jsonify(
         {"error": e.message, "code_major": e.major, "code_minor": e.minor}
     ), http_status
+
+
+_VALIDATION_FIELD_TO_CODE = {
+    "name": (524, 1006, "Invalid domain name in record"),
+    "type": (524, 1007, "Unknown record type"),
+    "content": (524, 1010, "Missing or invalid record content"),
+}
+
+
+def _raise_from_validation(err: ValidationError) -> None:
+    """Map Marshmallow validation errors to subreg's (major, minor) codes."""
+    messages = err.messages if isinstance(err.messages, dict) else {}
+    for field, (major, minor, msg) in _VALIDATION_FIELD_TO_CODE.items():
+        if field in messages:
+            raise ApiError(major, minor, msg)
+    raise ApiError(400, 0, str(err.messages))

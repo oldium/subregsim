@@ -66,3 +66,66 @@ def test_get_dns_zone_returns_records(client, api):
     assert rec["id"].isdigit()  # IDs must be stringified at the REST boundary
     assert rec["ttl"] == 600
     assert rec["prio"] == 0
+
+
+def test_create_record_returns_200_with_record_id(client, api):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "www", "type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["domain"] == "example.com"
+    assert body["record_id"].isdigit()
+    # Confirm it landed in the api
+    records = api.get_dns_zone("example.com")
+    assert len(records) == 1
+
+
+def test_create_record_missing_name_returns_400_524_1006(client):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1006
+
+
+def test_create_record_missing_type_returns_400_524_1007(client):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "x", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1007
+
+
+def test_create_record_bad_type_pattern_returns_400_524_1007(client):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "x", "type": "lowercase", "content": "x"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1007
+
+
+def test_create_record_unknown_domain_returns_400_524_1009(client):
+    resp = client.post(
+        "/dns/not-configured.tld/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "x", "type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["code_major"] == 524
+    assert body["code_minor"] == 1009
