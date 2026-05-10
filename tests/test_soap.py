@@ -8,7 +8,7 @@ import pytest
 
 from subregsim.api import Api
 from subregsim.auth import SoapSession
-from subregsim.soap import ApiHttpServer
+from subregsim.soap import build_spyne_wsgi
 
 GOLDEN_WSDL = Path(__file__).parent / "wsdl_golden.xml"
 
@@ -17,9 +17,8 @@ GOLDEN_WSDL = Path(__file__).parent / "wsdl_golden.xml"
 def wsgi_app():
     api = Api(["example.com"])
     session = SoapSession("user", "pass")
-    server = ApiHttpServer(("127.0.0.1", 0), "http://127.0.0.1:18080/", api, session, False)
-    yield server.get_app(), api, session
-    server.server_close()
+    app = build_spyne_wsgi(api, session, "http://127.0.0.1:18080/")
+    yield app, api, session
 
 
 def _call(wsgi_app, method, path, body=b"", content_type="text/xml; charset=utf-8"):

@@ -394,6 +394,33 @@ class ApiApplication(WsgiApplication):
     def handle_wsdl_request(self, req_env, start_response, url):
         return super().handle_wsdl_request(req_env, start_response, self.service_url)
 
+def build_spyne_wsgi(api, session, service_url: str):
+    """Build the Spyne WSGI application for the SOAP service."""
+    spyne_app = Application(
+        [SubregCzService], 'http://subreg.cz/wsdl',
+        'SubregCzService',
+        in_protocol=Soap11(),
+        out_protocol=Soap11(),
+        config={"api": api, "session": session},
+    )
+
+    # Spyne keys service_method_map by {Application.tns}method.name, so it
+    # only matches incoming requests whose body element lives in the same
+    # namespace as the WSDL service. The real subreg.cz WSDL splits the
+    # namespaces (service in http://subreg.cz/wsdl, request elements in
+    # http://subreg.cz/types). Register each method under the body element's
+    # namespace as an alias so the dispatcher resolves both.
+    for method_list in list(spyne_app.interface.service_method_map.values()):
+        for method in method_list:
+            in_ns = method.in_message.get_namespace()
+            if in_ns and in_ns != spyne_app.tns:
+                alias_key = "{%s}%s" % (in_ns, method.name)
+                aliases = spyne_app.interface.service_method_map.setdefault(alias_key, [])
+                if method not in aliases:
+                    aliases.append(method)
+
+    return ApiApplication(spyne_app, service_url)
+
 class ApiHttpServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
 
