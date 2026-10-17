@@ -68,6 +68,17 @@ class TestAddDnsRecord:
         assert isinstance(rid, int)
         assert rid >= 1
 
+    def test_cname_content_with_trailing_dot_raises_524_1001(self):
+        # Observed on the real API: "example.org." is rejected, "example.org" accepted.
+        api = make_api()
+        with pytest.raises(ApiError) as ei:
+            api.add_dns_record(
+                "example.com", {"name": "www", "type": "CNAME", "content": "example.org."}
+            )
+        assert (ei.value.major, ei.value.minor) == (524, 1001)
+        assert ei.value.message == "Invalid domain name in record"
+        assert api.get_dns_zone("example.com") == []
+
     def test_unknown_domain_raises_524_1009(self):
         api = make_api()
         with pytest.raises(ApiError) as ei:
@@ -120,6 +131,16 @@ class TestModifyDnsRecord:
         api.modify_dns_record("example.com", rid, {"content": "5.6.7.8"})
         rec = api.get_dns_zone("example.com")[0]
         assert rec["content"] == "5.6.7.8"
+
+    def test_cname_content_with_trailing_dot_raises_524_1001(self):
+        api = make_api()
+        rid = api.add_dns_record(
+            "example.com", {"name": "www", "type": "CNAME", "content": "example.org"}
+        )
+        with pytest.raises(ApiError) as ei:
+            api.modify_dns_record("example.com", rid, {"type": "CNAME", "content": "example.net."})
+        assert (ei.value.major, ei.value.minor) == (524, 1001)
+        assert api.get_dns_zone("example.com")[0]["content"] == "example.org"
 
     def test_unknown_id_raises_524_1003(self):
         api = make_api()

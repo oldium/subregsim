@@ -14,6 +14,12 @@ _VALID_RECORD_TYPES = frozenset(
 )
 
 
+def _check_content(rtype: Any, content: Any) -> None:
+    # Observed on the real API: a CNAME target with a trailing dot is rejected.
+    if rtype == "CNAME" and isinstance(content, str) and content.endswith("."):
+        raise ApiError(524, 1001, "Invalid domain name in record")
+
+
 class ApiError(Exception):
     """Raised by Api methods to signal a domain-level failure."""
 
@@ -65,6 +71,7 @@ class Api:
             raise ApiError(524, 1007, "Unknown record type")
         if "name" not in record:
             raise ApiError(524, 1006, "Invalid domain name in record")
+        _check_content(rtype, record.get("content"))
         with self._lock:
             if rtype == "CNAME" and any(
                 r["name"] == record["name"]
@@ -94,6 +101,10 @@ class Api:
             matches = [r for r in self._db[domain] if r["id"] == record_id]
             if not matches:
                 raise ApiError(524, 1003, "Record does not exist")
+            _check_content(
+                record.get("type", matches[0]["type"]),
+                record.get("content", matches[0].get("content")),
+            )
             matches[0].update(record)
             self._serial += 1
 

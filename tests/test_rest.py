@@ -95,6 +95,20 @@ def test_create_record_missing_name_returns_400_524_1006(client):
     assert body["code_minor"] == 1006
 
 
+def test_create_cname_with_trailing_dot_returns_400_524_1001(client):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "www", "type": "CNAME", "content": "example.org."},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "error": "Invalid domain name in record",
+        "code_major": 524,
+        "code_minor": 1001,
+    }
+
+
 def test_create_record_missing_type_returns_400_524_1007(client):
     resp = client.post(
         "/dns/example.com/record",
