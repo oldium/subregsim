@@ -73,7 +73,8 @@ class CreateRecordRequestSchema(Schema):
 
 class CreateRecordResponseSchema(Schema):
     domain = fields.String(required=True)
-    record_id = fields.String(required=True)
+    # Upstream swagger documents a string; the real API returns a number.
+    record_id = fields.Integer(required=True)
 
 
 class ModifyRecordRequestSchema(Schema):

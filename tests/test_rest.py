@@ -77,7 +77,8 @@ def test_create_record_returns_200_with_record_id(client, api):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["domain"] == "example.com"
-    assert body["record_id"].isdigit()
+    # Upstream swagger documents a string; the real API returns a number.
+    assert isinstance(body["record_id"], int)
     # Confirm it landed in the api
     records = api.get_dns_zone("example.com")
     assert len(records) == 1

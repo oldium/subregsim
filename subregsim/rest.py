@@ -146,7 +146,7 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
             _raise_from_validation(e)
         rid = api.add_dns_record(domain, payload)
         return jsonify(
-            CreateRecordResponseSchema().dump({"domain": domain, "record_id": str(rid)})
+            CreateRecordResponseSchema().dump({"domain": domain, "record_id": rid})
         )
 
     @app.route("/dns/<string:domain>/record/<string:id>", methods=["PUT"])
