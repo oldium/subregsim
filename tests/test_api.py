@@ -1,5 +1,6 @@
 """Unit tests for the transport-agnostic api.py core."""
 import pytest
+from dnslib import QTYPE, RR
 
 from subregsim.api import Api, ApiError
 
@@ -78,6 +79,11 @@ class TestAddDnsRecord:
         assert (ei.value.major, ei.value.minor) == (524, 1001)
         assert ei.value.message == "Invalid domain name in record"
         assert api.get_dns_zone("example.com") == []
+
+    def test_accepts_empty_name_for_the_apex(self):
+        api = make_api()
+        api.add_dns_record("example.com", {"name": "", "type": "A", "content": "1.2.3.4"})
+        assert api.get_dns_zone("example.com")[0]["name"] == ""
 
     def test_unknown_domain_raises_524_1009(self):
         api = make_api()
@@ -201,3 +207,19 @@ class TestToZone:
         assert "www" in zone
         assert "IN A" in zone
         assert "1.2.3.4" in zone
+
+    def test_record_owner_is_fully_qualified(self):
+        api = make_api()
+        api.add_dns_record("example.com", {"name": "www", "type": "A", "content": "1.2.3.4"})
+        owners = {(str(rr.rname), QTYPE[rr.rtype]) for rr in RR.fromZone(api.to_zone())}
+        assert ("www.example.com.", "A") in owners
+
+    def test_apex_record_owner_is_the_domain(self):
+        # An empty zone-file owner would mean "same as the previous record".
+        api = make_api()
+        api.add_dns_record("example.com", {"name": "www", "type": "A", "content": "1.2.3.4"})
+        api.add_dns_record("example.com", {"name": "", "type": "A", "content": "5.6.7.8"})
+        owners = {
+            (str(rr.rname), QTYPE[rr.rtype], str(rr.rdata)) for rr in RR.fromZone(api.to_zone())
+        }
+        assert ("example.com.", "A", "5.6.7.8") in owners

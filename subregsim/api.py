@@ -126,7 +126,8 @@ class Api:
                     f"( {self._serial} 86400 900 1209600 1800 )"
                 )
                 for rr in self._db[domain]:
-                    name = rr["name"]
+                    # Absolute owners: an empty one would mean "same as the previous record".
+                    name = f"{rr['name']}.{domain}." if rr["name"] else f"{domain}."
                     rtype = rr["type"]
                     content = rr.get("content", "")
                     prio = rr["prio"] if rtype == "MX" else ""

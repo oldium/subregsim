@@ -110,6 +110,18 @@ def test_create_cname_with_trailing_dot_returns_400_524_1001(client):
     }
 
 
+def test_create_record_at_the_apex_uses_an_empty_name(client):
+    headers = {"Authorization": "Bearer secret-token"}
+    resp = client.post(
+        "/dns/example.com/record",
+        headers=headers,
+        json={"name": "", "type": "A", "content": "1.2.3.4"},
+    )
+    assert resp.status_code == 200
+    records = client.get("/dns/example.com", headers=headers).get_json()["records"]
+    assert [r["name"] for r in records] == [""]
+
+
 def test_create_record_missing_type_returns_400_524_1007(client):
     resp = client.post(
         "/dns/example.com/record",
