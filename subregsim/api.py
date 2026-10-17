@@ -41,7 +41,7 @@ class Api:
     """
 
     def __init__(self, domains: list[str]) -> None:
-        self._domains = list(domains)
+        self._domains = list(dict.fromkeys(domains))
         self._db: dict[str, list[dict[str, Any]]] = {d: [] for d in self._domains}
         self._next_id = 1
         self._serial = 1

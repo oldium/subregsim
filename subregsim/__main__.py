@@ -24,7 +24,7 @@ def parse_command_line():
     optional_group = parser.add_argument_group("optional arguments")
     optional_group.add_argument("-c", "--config", metavar="FILE", is_config_file=True, help="configuration file for all options (can be specified only on command-line)")
     optional_group.add_argument("--version", action="version", version="%(prog)s " + __version__)
-    optional_group.add_argument("--domain", dest="domains", action="append", env_var="SUBREGSIM_DOMAIN", default=["example.com"], help="simulated domain name (defaults to example.com); may be repeated on the command-line, or given as a list (e.g. [example.com, example.net]) in the config file or SUBREGSIM_DOMAIN env var")
+    optional_group.add_argument("--domain", dest="domains", action="append", env_var="SUBREGSIM_DOMAIN", default=None, help="simulated domain name (defaults to example.com); may be repeated on the command-line, or given as a list (e.g. [example.com, example.net]) in the config file or SUBREGSIM_DOMAIN env var")
     optional_group.add_argument("--username", env_var="SUBREGSIM_USERNAME", default="username", help="expected login user name by the server (defaults to username)")
     optional_group.add_argument("--password", env_var="SUBREGSIM_PASSWORD", default="password", help="expected login password by the server (defaults to password)")
     optional_group.add_argument("--token", env_var="SUBREGSIM_TOKEN", default="token",
@@ -49,6 +49,10 @@ def parse_command_line():
 
     if parsed.ssl and ('ssl_certificate' not in parsed or not parsed.ssl_certificate):
         parser.error("--ssl requires --ssl-certificate")
+
+    # A list default would be appended to, not replaced, by --domain.
+    if not parsed.domains:
+        parsed.domains = ["example.com"]
 
     if parsed.port is None:
         parsed.port = 443 if parsed.ssl else 80

@@ -35,6 +35,10 @@ class TestListDomains:
             {"name": "example.net", "expire": "2023-10-20", "autorenew": 0},
         ]
 
+    def test_lists_a_repeated_domain_once(self):
+        api = Api(["example.com", "example.com"])
+        assert [d["name"] for d in api.list_domains()] == ["example.com"]
+
 
 class TestGetDnsZone:
     def test_unknown_domain_raises_524_1009(self):
