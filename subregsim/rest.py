@@ -140,10 +140,11 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
         """
         from .schemas import CreateRecordRequestSchema, CreateRecordResponseSchema
 
+        body = request.get_json(silent=True) or {}
         try:
-            payload = CreateRecordRequestSchema().load(request.get_json(silent=True) or {})
+            payload = CreateRecordRequestSchema().load(body)
         except ValidationError as e:
-            _raise_from_validation(e)
+            _raise_from_validation(e, body)
         rid = api.add_dns_record(domain, payload)
         return jsonify(
             CreateRecordResponseSchema().dump({"domain": domain, "record_id": rid})
@@ -191,10 +192,11 @@ def build_flask_app(api: Api, bearer: BearerAuth) -> Flask:
         from .schemas import ModifyRecordRequestSchema
 
         rid = _parse_record_id(id)
+        body = request.get_json(silent=True) or {}
         try:
-            payload = ModifyRecordRequestSchema().load(request.get_json(silent=True) or {})
+            payload = ModifyRecordRequestSchema().load(body)
         except ValidationError as e:
-            _raise_from_validation(e)
+            _raise_from_validation(e, body)
         api.modify_dns_record(domain, rid, payload)
         return jsonify({})
 
@@ -306,11 +308,17 @@ _VALIDATION_FIELD_TO_CODE = {
 }
 
 
-def _raise_from_validation(err: ValidationError) -> None:
+_MISSING_FIELD = "Missing data for required field."
+
+
+def _raise_from_validation(err: ValidationError, body: dict) -> None:
     """Map Marshmallow validation errors to subreg's (major, minor) codes."""
     messages = err.messages if isinstance(err.messages, dict) else {}
     for field, (major, minor, msg) in _VALIDATION_FIELD_TO_CODE.items():
         if field in messages:
+            if field == "content" and _MISSING_FIELD in messages[field]:
+                # Real subreg names the record type here.
+                raise ApiError(524, 1001, f"Empty record: {body.get('type')}")
             raise ApiError(major, minor, msg)
     raise ApiError(400, 0, str(err.messages))
 

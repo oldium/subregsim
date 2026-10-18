@@ -134,6 +134,37 @@ def test_create_record_missing_type_returns_400_524_1007(client):
     assert body["code_minor"] == 1007
 
 
+def test_create_record_missing_content_returns_400_524_1001_empty_record(client):
+    resp = client.post(
+        "/dns/example.com/record",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"name": "x", "type": "CNAME"},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "error": "Empty record: CNAME",
+        "code_major": 524,
+        "code_minor": 1001,
+    }
+
+
+def test_modify_record_missing_content_returns_400_524_1001_empty_record(client, api):
+    rid = api.add_dns_record(
+        "example.com", {"name": "txt", "type": "TXT", "content": "value"}
+    )
+    resp = client.put(
+        f"/dns/example.com/record/{rid}",
+        headers={"Authorization": "Bearer secret-token"},
+        json={"type": "TXT", "ttl": 600},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "error": "Empty record: TXT",
+        "code_major": 524,
+        "code_minor": 1001,
+    }
+
+
 def test_create_record_bad_type_pattern_returns_400_524_1007(client):
     resp = client.post(
         "/dns/example.com/record",
